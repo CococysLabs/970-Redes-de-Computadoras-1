@@ -8,14 +8,16 @@ Esta configuración se hace **primero**, porque agrupar los enlaces físicos en 
 
 **VLAN de ejemplo**
 
-* VLAN 10 → lab
+| VLAN | Nombre         |
+|------|----------------|
+| 10   | lab          |
 
 **Escenario**
 
-* Topología: **SW_Server ↔ Switch1 ↔ Switch2** (triángulo, con SW_Server también conectado directo a Switch2)
+* Topología: Se utilizan 3 switches **SW_Server - Switch1 - Switch2** (triángulo, con SW_Server también conectado directo a Switch2)
 * SW_Server es el **VTP Server** del dominio `semana4` y además está **forzado como Root Bridge** para VLAN 10
 * Switch1 y Switch2 estan configurados como **VTP Client**
-* Enlace a agrupar en este ejemplo: **SW_Server ↔ Switch1**
+* Enlace a agrupar en este ejemplo: todos los enlaces entre switches
 * Puertos físicos a agrupar: **Fa0/2 y Fa0/4**
 * Port-Channel: **Po1**
 

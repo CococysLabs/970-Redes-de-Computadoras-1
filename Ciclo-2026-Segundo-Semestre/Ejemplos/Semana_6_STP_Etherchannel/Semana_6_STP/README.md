@@ -15,8 +15,10 @@ En este ejemplo se trabaja sobre **STP**, sin EtherChannel: cada enlace físico 
 
 **VLANs de ejemplo**
 
-* VLAN 10 → `lab`
-* VLAN 50 → `stp`
+| VLAN | Nombre         |
+|------|----------------|
+| 10   | lab          |
+| 50   | stp          |
 
 Se usan dos VLANs para demostrar que el Root Bridge **se configura por VLAN**, y que un mismo switch puede forzarse como root de varias VLANs a la vez.
 

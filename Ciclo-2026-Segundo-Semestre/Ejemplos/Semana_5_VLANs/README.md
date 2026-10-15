@@ -153,7 +153,7 @@ show vlan brief
 show interfaces trunk
 ```
 
-### Resultado esperado — Switch Server / Clients
+### Resultado esperado — Switch Server / Clients (show vlan brief)
 ```
 VLAN Name                             Status    Ports
 ---- -------------------------------- --------- -------------------------------
@@ -171,7 +171,7 @@ VLAN Name                             Status    Ports
 1003 token-ring-default               active
 ```
 
-### Resultado esperado — SW_Laboratorio (Transparent)
+### Resultado esperado — SW_Laboratorio (Transparent) (show vlan brief)
 ```
 VLAN Name                             Status    Ports
 ---- -------------------------------- --------- -------------------------------
