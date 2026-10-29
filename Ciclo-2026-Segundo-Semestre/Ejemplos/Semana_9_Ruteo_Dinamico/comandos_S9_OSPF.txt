@@ -1,0 +1,186 @@
+!=====================================================================
+! Laboratorio Redes de Computadoras 1 - USAC / ECYS
+! Semana 9 - Ejemplo demostrativo: OSPF de área única
+! Equipos: 3 routers 2911, 3 switches 2960, 3 PC (Cisco Packet Tracer 8.2+)
+!
+! PARTE A: configuración base (va en el archivo inicial, fuera de cámara)
+! PARTE B: configuración OSPF (lo que se demuestra en clase)
+! PARTE C: comandos de verificación
+!
+! Cada bloque se puede copiar y pegar en la CLI del equipo.
+!=====================================================================
+
+
+!=====================================================================
+! PARTE A - CONFIGURACIÓN BASE
+!=====================================================================
+
+!---------------------------- R1 ------------------------------------
+enable
+configure terminal
+hostname R1
+no ip domain-lookup
+interface GigabitEthernet0/0
+ description LAN Sucursal Norte
+ ip address 192.168.1.1 255.255.255.0
+ no shutdown
+exit
+interface GigabitEthernet0/1
+ description Enlace hacia R2
+ ip address 10.0.12.1 255.255.255.252
+ no shutdown
+exit
+end
+write memory
+
+!---------------------------- R2 ------------------------------------
+enable
+configure terminal
+hostname R2
+no ip domain-lookup
+interface GigabitEthernet0/0
+ description LAN Sucursal Centro
+ ip address 192.168.2.1 255.255.255.0
+ no shutdown
+exit
+interface GigabitEthernet0/1
+ description Enlace hacia R1
+ ip address 10.0.12.2 255.255.255.252
+ no shutdown
+exit
+interface GigabitEthernet0/2
+ description Enlace hacia R3
+ ip address 10.0.23.1 255.255.255.252
+ no shutdown
+exit
+end
+write memory
+
+!---------------------------- R3 ------------------------------------
+enable
+configure terminal
+hostname R3
+no ip domain-lookup
+interface GigabitEthernet0/0
+ description LAN Sucursal Sur
+ ip address 192.168.3.1 255.255.255.0
+ no shutdown
+exit
+interface GigabitEthernet0/1
+ description Enlace hacia R2
+ ip address 10.0.23.2 255.255.255.252
+ no shutdown
+exit
+end
+write memory
+
+!---------------------------- S1, S2, S3 ----------------------------
+! Los switches no necesitan configuración: todos los puertos quedan en
+! la VLAN 1. Opcional, solo para identificarlos:
+enable
+configure terminal
+hostname S1
+end
+! (repetir con S2 y S3)
+
+!---------------------------- PC (Desktop > IP Configuration) -------
+! PC1  IP 192.168.1.10  Máscara 255.255.255.0  Gateway 192.168.1.1
+! PC2  IP 192.168.2.10  Máscara 255.255.255.0  Gateway 192.168.2.1
+! PC3  IP 192.168.3.10  Máscara 255.255.255.0  Gateway 192.168.3.1
+
+
+!=====================================================================
+! VERIFICACIÓN DEL ESTADO INICIAL (antes de OSPF)
+!=====================================================================
+! En PC1:  ping 192.168.3.10        -> falla (Request timed out / Destination host unreachable)
+! En R1:   show ip route            -> solo aparecen redes C y L (conectadas)
+
+
+!=====================================================================
+! PARTE B - CONFIGURACIÓN OSPF (demostración)
+! Wildcard = 255.255.255.255 - máscara
+!   /24 -> 0.0.0.255      /30 -> 0.0.0.3
+!=====================================================================
+
+!---------------------------- R1 ------------------------------------
+enable
+configure terminal
+router ospf 1
+ router-id 1.1.1.1
+ network 192.168.1.0 0.0.0.255 area 0
+ network 10.0.12.0 0.0.0.3 area 0
+ passive-interface GigabitEthernet0/0
+end
+write memory
+
+!---------------------------- R2 ------------------------------------
+enable
+configure terminal
+router ospf 1
+ router-id 2.2.2.2
+ network 192.168.2.0 0.0.0.255 area 0
+ network 10.0.12.0 0.0.0.3 area 0
+ network 10.0.23.0 0.0.0.3 area 0
+ passive-interface GigabitEthernet0/0
+end
+write memory
+! Mensaje esperado:
+! %OSPF-5-ADJCHG: Process 1, Nbr 1.1.1.1 on GigabitEthernet0/1 from LOADING to FULL, Loading Done
+
+!---------------------------- R3 ------------------------------------
+enable
+configure terminal
+router ospf 1
+ router-id 3.3.3.3
+ network 192.168.3.0 0.0.0.255 area 0
+ network 10.0.23.0 0.0.0.3 area 0
+ passive-interface GigabitEthernet0/0
+end
+write memory
+! Mensaje esperado:
+! %OSPF-5-ADJCHG: Process 1, Nbr 2.2.2.2 on GigabitEthernet0/1 from LOADING to FULL, Loading Done
+
+
+!=====================================================================
+! PARTE C - VERIFICACIÓN
+!=====================================================================
+
+! --- Vecinos (en R2 deben aparecer dos, ambos en FULL) ---
+show ip ospf neighbor
+! Neighbor ID  Pri  State      Dead Time  Address     Interface
+! 1.1.1.1        1  FULL/DR    00:00:35   10.0.12.1   GigabitEthernet0/1
+! 3.3.3.3        1  FULL/BDR   00:00:33   10.0.23.2   GigabitEthernet0/2
+! (el rol DR/BDR puede variar según el orden en que se configuraron)
+
+! --- Tabla de enrutamiento (en R1) ---
+show ip route ospf
+! O    10.0.23.0/30 [110/2] via 10.0.12.2, GigabitEthernet0/1
+! O    192.168.2.0/24 [110/2] via 10.0.12.2, GigabitEthernet0/1
+! O    192.168.3.0/24 [110/3] via 10.0.12.2, GigabitEthernet0/1
+
+! --- Parámetros del protocolo ---
+show ip protocols
+!   Routing Protocol is "ospf 1"
+!   Router ID 1.1.1.1
+!   Routing for Networks: 192.168.1.0 0.0.0.255 area 0 / 10.0.12.0 0.0.0.3 area 0
+!   Passive Interface(s): GigabitEthernet0/0
+
+! --- Interfaces que participan en OSPF ---
+show ip ospf interface brief
+
+! --- Prueba de extremo a extremo (en PC1) ---
+! ping 192.168.3.10      -> respuestas exitosas (el primero puede perderse por ARP)
+! tracert 192.168.3.10   -> 192.168.1.1 > 10.0.12.2 > 10.0.23.2 > 192.168.3.10
+
+
+!=====================================================================
+! ERRORES COMUNES
+!=====================================================================
+! 1. Escribir la IP de la interfaz en lugar de la red (network 192.168.1.1 0.0.0.255 area 0).
+!    Funciona igual, porque la wildcard ignora el último octeto, pero en clase se pide declarar
+!    la dirección de red para que quede claro qué red se anuncia.
+! 2. Usar la máscara en lugar de la wildcard (network 10.0.12.0 255.255.255.252)
+!    -> la red no entra a OSPF y no se forma la adyacencia.
+! 3. Olvidar declarar el enlace WAN -> no aparece el vecino en show ip ospf neighbor.
+! 4. Áreas distintas en los extremos de un enlace -> no hay adyacencia.
+! 5. Marcar como passive la interfaz WAN en lugar de la LAN -> se pierde el vecino.
