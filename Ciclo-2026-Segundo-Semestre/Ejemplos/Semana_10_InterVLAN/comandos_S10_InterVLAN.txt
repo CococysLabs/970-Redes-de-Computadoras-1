@@ -1,0 +1,228 @@
+!=====================================================================
+! Laboratorio Redes de Computadoras 1 - USAC / ECYS
+! Semana 10 - Ejemplo demostrativo: Enrutamiento InterVLAN
+! Parte A: Router-on-a-stick (R1 ISR4331)
+! Parte B: SVI en switch capa 3 (MLS1 3560)
+! Cisco Packet Tracer 8.2+
+!
+! Las dos partes usan los mismos switches de acceso, VLAN y direcciones.
+! Lo único que cambia es el equipo que enruta (R1 o MLS1).
+! Cada bloque se puede copiar y pegar en la CLI del equipo.
+!=====================================================================
+
+!---------------------------------------------------------------------
+! Direccionamiento VLSM (red 192.168.10.0/24)
+!---------------------------------------------------------------------
+! VLAN 10 ADMIN   192.168.10.0/26    255.255.255.192  gateway 192.168.10.1
+! VLAN 20 RRHH    192.168.10.64/27   255.255.255.224  gateway 192.168.10.65
+! VLAN 30 IT      192.168.10.96/28   255.255.255.240  gateway 192.168.10.97
+! VLAN 99 NATIVA  sin direccionamiento
+!
+! PC (Desktop > IP Configuration)
+! PC1 ADMIN  192.168.10.10   255.255.255.192  GW 192.168.10.1   S1 F0/1
+! PC2 RRHH   192.168.10.70   255.255.255.224  GW 192.168.10.65  S1 F0/2
+! PC3 IT     192.168.10.100  255.255.255.240  GW 192.168.10.97  S2 F0/1
+! PC4 ADMIN  192.168.10.11   255.255.255.192  GW 192.168.10.1   S2 F0/2
+
+
+!=====================================================================
+! PASO 1 - VLAN, PUERTOS DE ACCESO Y TRONCALES (igual en Parte A y B)
+!=====================================================================
+
+!---------------------------- S1 ------------------------------------
+enable
+configure terminal
+hostname S1
+no ip domain-lookup
+vlan 10
+ name ADMIN
+vlan 20
+ name RRHH
+vlan 30
+ name IT
+vlan 99
+ name NATIVA
+exit
+interface FastEthernet0/1
+ switchport mode access
+ switchport access vlan 10
+exit
+interface FastEthernet0/2
+ switchport mode access
+ switchport access vlan 20
+exit
+! G0/1 hacia R1 (Parte A) o hacia MLS1 (Parte B)
+! G0/2 hacia S2
+interface range GigabitEthernet0/1 - 2
+ switchport mode trunk
+ switchport trunk native vlan 99
+ switchport trunk allowed vlan 10,20,30,99
+exit
+end
+write memory
+
+!---------------------------- S2 ------------------------------------
+enable
+configure terminal
+hostname S2
+no ip domain-lookup
+vlan 10
+ name ADMIN
+vlan 20
+ name RRHH
+vlan 30
+ name IT
+vlan 99
+ name NATIVA
+exit
+interface FastEthernet0/1
+ switchport mode access
+ switchport access vlan 30
+exit
+interface FastEthernet0/2
+ switchport mode access
+ switchport access vlan 10
+exit
+! G0/1 hacia S1
+interface GigabitEthernet0/1
+ switchport mode trunk
+ switchport trunk native vlan 99
+ switchport trunk allowed vlan 10,20,30,99
+exit
+end
+write memory
+
+! Comprobación antes de enrutar:
+! PC1 -> PC4 (misma VLAN 10, distinto switch): ping EXITOSO
+! PC1 -> PC2 (VLAN distinta): ping FALLA, todavía nadie enruta
+
+
+!=====================================================================
+! PARTE A - PASO 2: ROUTER-ON-A-STICK (R1 ISR4331)
+!=====================================================================
+enable
+configure terminal
+hostname R1
+no ip domain-lookup
+interface GigabitEthernet0/0/0
+ no ip address
+ no shutdown
+exit
+interface GigabitEthernet0/0/0.10
+ description Gateway ADMIN
+ encapsulation dot1Q 10
+ ip address 192.168.10.1 255.255.255.192
+exit
+interface GigabitEthernet0/0/0.20
+ description Gateway RRHH
+ encapsulation dot1Q 20
+ ip address 192.168.10.65 255.255.255.224
+exit
+interface GigabitEthernet0/0/0.30
+ description Gateway IT
+ encapsulation dot1Q 30
+ ip address 192.168.10.97 255.255.255.240
+exit
+interface GigabitEthernet0/0/0.99
+ description VLAN nativa
+ encapsulation dot1Q 99 native
+exit
+end
+write memory
+
+
+!=====================================================================
+! PARTE B - PASO 3: SVI EN SWITCH CAPA 3 (MLS1 3560)
+! Se quita R1 y se conecta MLS1 G0/1 a S1 G0/1.
+!=====================================================================
+enable
+configure terminal
+hostname MLS1
+no ip domain-lookup
+ip routing
+vlan 10
+ name ADMIN
+vlan 20
+ name RRHH
+vlan 30
+ name IT
+vlan 99
+ name NATIVA
+exit
+interface GigabitEthernet0/1
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk native vlan 99
+ switchport trunk allowed vlan 10,20,30,99
+exit
+interface vlan 10
+ description Gateway ADMIN
+ ip address 192.168.10.1 255.255.255.192
+ no shutdown
+exit
+interface vlan 20
+ description Gateway RRHH
+ ip address 192.168.10.65 255.255.255.224
+ no shutdown
+exit
+interface vlan 30
+ description Gateway IT
+ ip address 192.168.10.97 255.255.255.240
+ no shutdown
+exit
+end
+write memory
+! Nota: en el 3560 "switchport trunk encapsulation dot1q" va ANTES de
+! "switchport mode trunk"; si no, el switch rechaza el modo troncal.
+
+
+!=====================================================================
+! PASO 4 - VERIFICACIÓN
+!=====================================================================
+
+! --- En S1 y S2 ---
+show vlan brief            ! F0/1 y F0/2 en su VLAN
+show interfaces trunk      ! G0/1 (y G0/2 en S1) en trunking, nativa 99, VLAN 10,20,30,99
+
+! --- Parte A, en R1 ---
+show ip interface brief
+! GigabitEthernet0/0/0      unassigned      YES unset  up  up
+! GigabitEthernet0/0/0.10   192.168.10.1    YES manual up  up
+! GigabitEthernet0/0/0.20   192.168.10.65   YES manual up  up
+! GigabitEthernet0/0/0.30   192.168.10.97   YES manual up  up
+show ip route connected
+! C 192.168.10.0/26  is directly connected, GigabitEthernet0/0/0.10
+! C 192.168.10.64/27 is directly connected, GigabitEthernet0/0/0.20
+! C 192.168.10.96/28 is directly connected, GigabitEthernet0/0/0.30
+
+! --- Parte B, en MLS1 ---
+show ip interface brief | include Vlan
+! Vlan10   192.168.10.1    YES manual up  up
+! Vlan20   192.168.10.65   YES manual up  up
+! Vlan30   192.168.10.97   YES manual up  up
+show ip route connected
+! C 192.168.10.0/26  is directly connected, Vlan10
+! C 192.168.10.64/27 is directly connected, Vlan20
+! C 192.168.10.96/28 is directly connected, Vlan30
+
+! --- En las PC (ambas partes) ---
+! PC1: ping 192.168.10.70    -> EXITOSO (ADMIN -> RRHH)
+! PC1: ping 192.168.10.100   -> EXITOSO (ADMIN -> IT)
+! PC1: tracert 192.168.10.100
+!      1  192.168.10.1     (gateway: subinterfaz de R1 o SVI de MLS1)
+!      2  192.168.10.100
+
+
+!=====================================================================
+! ERRORES COMUNES
+!=====================================================================
+! 1. El número de "encapsulation dot1Q" no coincide con la VLAN del switch
+!    -> la subinterfaz queda up/up pero el ping no pasa.
+! 2. Falta "no shutdown" en la interfaz física G0/0/0 del router
+!    -> todas las subinterfaces quedan down.
+! 3. Olvidar "ip routing" en MLS1 -> cada PC llega a su gateway, pero no a otras VLAN.
+! 4. La SVI aparece down/down -> la VLAN no existe en MLS1 o no hay troncal activa.
+! 5. Máscara equivocada en la PC (por ejemplo /24 en lugar de /26) -> la PC
+!    cree que el destino está en su misma red y no usa el gateway.
+! 6. VLAN nativa distinta en los extremos de una troncal -> mensajes
+!    %CDP-4-NATIVE_VLAN_MISMATCH.
